@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Sarah CRM Connector",
+  "version": "0.1.0",
+  "description": "Captures approved VinSolutions events for the Sarah pilot.",
+  "permissions": ["storage"],
+  "host_permissions": ["https://*.vinsolutions.com/*"],
+  "background": { "service_worker": "service-worker.js" },
+  "content_scripts": [{ "matches": ["https://*.vinsolutions.com/*"], "js": ["content-script.js"], "run_at": "document_idle" }]
+}
