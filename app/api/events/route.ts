@@ -1,21 +1,30 @@
 import { NextResponse } from "next/server";
-import type { ConnectorEventEnvelope } from "@/lib/connectors/types";
-
-function isEnvelope(value: unknown): value is ConnectorEventEnvelope {
-  if (!value || typeof value !== "object") return false;
-  const envelope = value as Partial<ConnectorEventEnvelope>;
-  return Boolean(envelope.eventId && envelope.occurredAt && envelope.source && envelope.customer?.externalId && envelope.event?.type);
-}
+import { persistConnectorEvent } from "@/lib/repository";
+import { connectorEventEnvelopeSchema } from "@/lib/validation";
 
 export async function POST(request: Request) {
-  if (process.env.CONNECTOR_SHARED_SECRET && request.headers.get("x-connector-secret") !== process.env.CONNECTOR_SHARED_SECRET) {
+  const secret = process.env.CONNECTOR_SHARED_SECRET?.trim();
+  if (!secret) return NextResponse.json({ error: "Connector authentication is not configured" }, { status: 503 });
+  if (request.headers.get("x-connector-secret") !== secret) {
     return NextResponse.json({ error: "Unauthorized connector" }, { status: 401 });
   }
 
-  const payload: unknown = await request.json();
-  if (!isEnvelope(payload)) return NextResponse.json({ error: "Invalid event envelope" }, { status: 400 });
+  let payload: unknown;
+  try {
+    payload = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Request body must be valid JSON" }, { status: 400 });
+  }
+  const parsed = connectorEventEnvelopeSchema.safeParse(payload);
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid event envelope", issues: parsed.error.issues }, { status: 400 });
+  }
 
-  // Phase 1 validates the browser connector contract. The production adapter
-  // persists this envelope and de-duplicates on eventId in PostgreSQL.
-  return NextResponse.json({ accepted: true, eventId: payload.eventId }, { status: 202 });
+  try {
+    const result = await persistConnectorEvent(parsed.data);
+    return NextResponse.json({ accepted: true, duplicate: result.duplicate, eventId: parsed.data.eventId }, { status: 202 });
+  } catch (error) {
+    console.error("Connector event persistence failed", error instanceof Error ? error.message : "Unknown error");
+    return NextResponse.json({ error: "Connector event was not persisted" }, { status: 503 });
+  }
 }

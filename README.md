@@ -10,7 +10,9 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The prototype ships with representative pilot data; connect PostgreSQL and implement a `CRMConnector` adapter when moving beyond the demo.
+Open [http://localhost:3000](http://localhost:3000). Without `DATABASE_URL`, Sarah runs in an explicitly labeled demo mode. Demo approvals are not stored or reported as sent.
+
+To enable persistence, create a PostgreSQL database, apply `database/schema.sql`, and set `DATABASE_URL`. The server connection must use a role allowed to access the RLS-protected tables. Set a strong `CONNECTOR_SHARED_SECRET` before accepting connector events.
 
 ## Architecture
 
@@ -18,13 +20,18 @@ Open [http://localhost:3000](http://localhost:3000). The prototype ships with re
 - **Intelligence layer:** channel-agnostic decision engine in `lib/decision-engine.ts`.
 - **CRM boundary:** `CRMConnector` contract in `lib/connectors/types.ts`; browser and future official API adapters implement the same interface.
 - **Source of truth:** append-only `customer_events` timeline in `database/schema.sql`.
-- **Controlled actions:** recommendations are reviewed in the manager UI before communication is sent.
-- **Extension seam:** the Chrome extension captures normalized events and submits them to `/api/events`; it does not own business logic.
+- **Controlled actions:** manager-approved SMS and email drafts enter an idempotent outbound-action queue; approval is not treated as external delivery.
+- **Extension seam:** the included Chrome extension currently captures VinSolutions page context locally. Its live event submission and dealership-specific field mapping still require validation in the authenticated VinSolutions workflow.
+
+## Current boundary
+
+The dashboard, decision engine, event persistence, and approval queue are implemented. Real VinSolutions delivery is not implemented and is never simulated as successful. The production app still needs manager authentication, an initialized PostgreSQL database, and a validated connector before dealership use.
 
 ## Checks
 
 ```bash
 npm run lint
 npm run typecheck
+npm test
 npm run build
 ```

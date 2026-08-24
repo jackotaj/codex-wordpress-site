@@ -1,4 +1,4 @@
-import type { Channel, CustomerEvent } from "@/lib/types";
+import type { Channel, CustomerEvent, MessageRecommendation } from "@/lib/types";
 
 export interface CRMCustomer {
   externalId: string;
@@ -6,6 +6,17 @@ export interface CRMCustomer {
   lastName: string;
   phone?: string;
   email?: string;
+}
+
+export interface DashboardContext {
+  vehicle?: string;
+  leadSource?: string;
+  status?: string;
+  intent?: number;
+  vinSolutionsUrl?: string;
+  nextBestAction?: string;
+  reason?: string;
+  recommendation?: MessageRecommendation;
 }
 
 export interface OutboundMessage {
@@ -29,5 +40,6 @@ export type ConnectorEventEnvelope = {
   occurredAt: string;
   source: "VINSOLUTIONS_BROWSER" | "VINSOLUTIONS_API" | "GOTO_CONNECT";
   customer: CRMCustomer;
+  dashboard?: DashboardContext;
   event: Omit<CustomerEvent, "id">;
 };
