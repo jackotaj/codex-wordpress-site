@@ -93,7 +93,9 @@ CREATE TABLE IF NOT EXISTS outbound_actions (
 
 CREATE INDEX IF NOT EXISTS customer_events_timeline_idx ON customer_events (customer_id, timestamp DESC);
 CREATE INDEX IF NOT EXISTS conversations_customer_idx ON conversations (customer_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS messages_conversation_idx ON messages (conversation_id);
 CREATE INDEX IF NOT EXISTS outbound_actions_status_idx ON outbound_actions (status, created_at);
+CREATE INDEX IF NOT EXISTS outbound_actions_customer_idx ON outbound_actions (customer_id);
 
 CREATE OR REPLACE FUNCTION reject_customer_event_mutation()
 RETURNS trigger
@@ -103,6 +105,8 @@ BEGIN
   RAISE EXCEPTION 'customer_events is append-only';
 END;
 $$;
+
+ALTER FUNCTION reject_customer_event_mutation() SET search_path = '';
 
 DROP TRIGGER IF EXISTS customer_events_append_only ON customer_events;
 CREATE TRIGGER customer_events_append_only
