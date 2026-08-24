@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
+import { connectorAuthConfigured, verifyConnectorSecret } from "@/lib/connector-auth";
 import { persistConnectorEvent } from "@/lib/repository";
 import { connectorEventEnvelopeSchema } from "@/lib/validation";
 
 export async function POST(request: Request) {
-  const secret = process.env.CONNECTOR_SHARED_SECRET?.trim();
-  if (!secret) return NextResponse.json({ error: "Connector authentication is not configured" }, { status: 503 });
-  if (request.headers.get("x-connector-secret") !== secret) {
+  if (!connectorAuthConfigured()) return NextResponse.json({ error: "Connector authentication is not configured" }, { status: 503 });
+  if (!verifyConnectorSecret(request.headers.get("x-connector-secret"))) {
     return NextResponse.json({ error: "Unauthorized connector" }, { status: 401 });
   }
 

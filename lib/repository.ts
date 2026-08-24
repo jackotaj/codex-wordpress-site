@@ -4,8 +4,8 @@ import { createHash, randomUUID } from "node:crypto";
 
 import { customers as demoCustomers, stats as demoStats } from "./mock-data";
 import { databaseConfigured, getDatabasePool } from "./db";
-import type { ConnectorEventInput, ApprovedMessageInput } from "./validation";
-import type { Channel, Customer, CustomerEvent, DashboardSnapshot, EventKind, MessageRecommendation, QueuedMessage } from "./types";
+import type { ApprovedMessageInput, CompleteActionInput, ConnectorEventInput } from "./validation";
+import type { ApprovedAction, Channel, Customer, CustomerEvent, DashboardSnapshot, EventKind, MessageRecommendation, QueuedMessage } from "./types";
 
 interface CustomerRow {
   internal_id: string;
@@ -132,7 +132,7 @@ export async function loadDashboardSnapshot(): Promise<DashboardSnapshot> {
         initials: initials(row.first_name, row.last_name),
         name: `${row.first_name} ${row.last_name}`.trim(),
         vehicle: row.vehicle ?? "Vehicle not captured",
-        source: row.source ?? "VinSolutions",
+        source: row.source === "VINSOLUTIONS_BROWSER" ? "VinSolutions" : row.source ?? "VinSolutions",
         intent: row.intent ?? 0,
         status: row.status ?? "Needs review",
         reason: row.action_reason ?? events[0]?.detail ?? "Recent customer activity is available.",
@@ -144,6 +144,10 @@ export async function loadDashboardSnapshot(): Promise<DashboardSnapshot> {
     });
 
     const allEvents = customers.flatMap((customer) => customer.events);
+    const lastEventAt = allEvents.reduce<string | null>((latest, event) => {
+      if (!latest || new Date(event.timestamp).getTime() > new Date(latest).getTime()) return event.timestamp;
+      return latest;
+    }, null);
     const pendingResult = await pool.query<{ count: string }>(
       "SELECT count(*)::text AS count FROM outbound_actions WHERE status = 'APPROVED'",
     );
@@ -163,7 +167,7 @@ export async function loadDashboardSnapshot(): Promise<DashboardSnapshot> {
         state: "ready",
         label: "Database connected",
         detail: `${customers.length} customers loaded; ${pendingActions} approved actions are waiting for execution.`,
-        lastEventAt: allEvents[0]?.timestamp ?? null,
+        lastEventAt,
         pendingActions,
       },
     };
@@ -276,10 +280,116 @@ export async function queueApprovedMessage(input: ApprovedMessageInput & { appro
     return { actionId: inserted.rows[0].id, mode: "database", status: "APPROVED", duplicate: false };
   }
 
-  const existing = await pool.query<{ id: string }>(
-    "SELECT id::text FROM outbound_actions WHERE idempotency_key = $1 LIMIT 1",
+  const existing = await pool.query<{ id: string; status: "APPROVED" | "PROCESSING" | "SENT" | "FAILED" | "CANCELLED" }>(
+    "SELECT id::text, status::text FROM outbound_actions WHERE idempotency_key = $1 LIMIT 1",
     [idempotencyKey],
   );
   if (!existing.rows[0]) throw new Error("Customer was not found or the approved action could not be queued.");
-  return { actionId: existing.rows[0].id, mode: "database", status: "APPROVED", duplicate: true };
+  return {
+    actionId: existing.rows[0].id,
+    mode: "database",
+    status: existing.rows[0].status === "SENT" ? "ALREADY_SENT" : existing.rows[0].status,
+    duplicate: true,
+  };
+}
+
+export async function loadApprovedActions(customerExternalId: string): Promise<{ mode: "demo" | "database"; actions: ApprovedAction[] }> {
+  if (!databaseConfigured()) return { mode: "demo", actions: [] };
+  const pool = getDatabasePool();
+  const result = await pool.query<{
+    action_id: string;
+    customer_id: string;
+    channel: "SMS" | "EMAIL";
+    message_text: string;
+    approved_by: string;
+    created_at: Date;
+  }>(`
+    SELECT
+      actions.id::text AS action_id,
+      customers.vin_solutions_customer_id AS customer_id,
+      actions.channel,
+      actions.message_text,
+      actions.approved_by,
+      actions.created_at
+    FROM outbound_actions actions
+    JOIN customers ON customers.id = actions.customer_id
+    WHERE customers.vin_solutions_customer_id = $1
+      AND actions.status = 'APPROVED'
+    ORDER BY actions.created_at
+    LIMIT 10
+  `, [customerExternalId]);
+  return {
+    mode: "database",
+    actions: result.rows.map((row) => ({
+      actionId: row.action_id,
+      customerId: row.customer_id,
+      channel: row.channel,
+      body: row.message_text,
+      approvedBy: row.approved_by,
+      createdAt: row.created_at.toISOString(),
+      status: "APPROVED",
+    })),
+  };
+}
+
+export async function completeApprovedAction(actionId: string, input: CompleteActionInput): Promise<{ status: "SENT" | "FAILED"; duplicate: boolean }> {
+  if (!databaseConfigured()) throw new Error("Outbound action persistence is not configured.");
+  const pool = getDatabasePool();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const updated = await client.query<{ customer_id: string; channel: Channel; message_text: string }>(`
+      UPDATE outbound_actions
+      SET
+        status = $2,
+        external_message_id = $3,
+        failure_reason = $4,
+        attempted_at = now(),
+        completed_at = now(),
+        updated_at = now()
+      WHERE id = $1::uuid AND status = 'APPROVED'
+      RETURNING customer_id::text, channel, message_text
+    `, [actionId, input.outcome, input.externalMessageId ?? null, input.failureReason ?? null]);
+
+    if (updated.rows[0] && input.outcome === "SENT") {
+      await client.query(`
+        INSERT INTO customer_events (
+          external_event_id, customer_id, event_type, event_source, event_data, timestamp
+        ) VALUES ($1, $2::uuid, 'AI_TEXT_SENT', 'VINSOLUTIONS_BROWSER', $3::jsonb, now())
+        ON CONFLICT (external_event_id) DO NOTHING
+      `, [
+        `outbound-action:${actionId}:sent`,
+        updated.rows[0].customer_id,
+        JSON.stringify({
+          title: "Approved message sent",
+          detail: updated.rows[0].message_text,
+          channel: updated.rows[0].channel,
+        }),
+      ]);
+      await client.query(`
+        UPDATE customers
+        SET
+          recommendation = NULL,
+          next_best_action = 'Review latest activity',
+          action_reason = 'The approved draft was marked sent in VinSolutions.',
+          updated_at = now()
+        WHERE id = $1::uuid
+      `, [updated.rows[0].customer_id]);
+    }
+
+    if (!updated.rows[0]) {
+      const existing = await client.query<{ status: string }>(
+        "SELECT status::text FROM outbound_actions WHERE id = $1::uuid LIMIT 1",
+        [actionId],
+      );
+      if (existing.rows[0]?.status !== input.outcome) throw new Error("Approved action was not found or is no longer pending.");
+    }
+    await client.query("COMMIT");
+    return { status: input.outcome, duplicate: !updated.rows[0] };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }

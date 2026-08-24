@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Sarah CRM Connector</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main>
+      <header><span>✦</span><div><h1>Sarah CRM Connector</h1><p>Verified VinSolutions context, human-approved delivery.</p></div></header>
+      <form id="settings">
+        <section>
+          <h2>Connection</h2>
+          <label>Sarah app URL<input id="apiBaseUrl" type="url" placeholder="https://sarah.example.com" required /></label>
+          <label>Connector secret<input id="connectorSecret" type="password" autocomplete="off" required /></label>
+        </section>
+        <section>
+          <h2>Verified VinSolutions selectors</h2>
+          <p class="help">Leave an optional selector blank unless it has been confirmed in the dealership's current VinSolutions page. Customer ID can also be read from a customerId or contactId URL parameter.</p>
+          <label>Customer ID selector<input id="customerIdSelector" placeholder="[data-customer-id]" /></label>
+          <label>Customer full-name selector<input id="customerNameSelector" placeholder="[data-customer-name]" /></label>
+          <label>Vehicle selector<input id="vehicleSelector" placeholder="Optional CSS selector" /></label>
+          <label>Lead source selector<input id="leadSourceSelector" placeholder="Optional CSS selector" /></label>
+          <label>Status selector<input id="statusSelector" placeholder="Optional CSS selector" /></label>
+        </section>
+        <button type="submit">Save and test connection</button>
+        <p id="status" role="status"></p>
+      </form>
+      <aside>Sarah does not store VinSolutions credentials or click the CRM Send button. Approved drafts remain manager-controlled.</aside>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>

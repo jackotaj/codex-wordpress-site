@@ -21,7 +21,7 @@ export function Dashboard({ snapshot, managerName }: { snapshot: DashboardSnapsh
   const [activeId, setActiveId] = useState(customers[0]?.id ?? "");
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
-  const [approval, setApproval] = useState<"idle" | "sending" | "queued" | "demo" | "error">("idle");
+  const [approval, setApproval] = useState<"idle" | "sending" | "queued" | "demo" | "handled" | "error">("idle");
   const [approvalError, setApprovalError] = useState("");
   const [dismissedId, setDismissedId] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -49,7 +49,11 @@ export function Dashboard({ snapshot, managerName }: { snapshot: DashboardSnapsh
       });
       const result = await response.json() as Partial<QueuedMessage> & { error?: string };
       if (!response.ok) throw new Error(result.error ?? "Approved message was not queued.");
-      setApproval(result.status === "DEMO_ONLY" ? "demo" : "queued");
+      if (!result.status) throw new Error("Approved message returned an invalid queue status.");
+      if (result.status === "DEMO_ONLY") setApproval("demo");
+      else if (result.status === "APPROVED") setApproval("queued");
+      else if (result.status === "ALREADY_SENT") setApproval("handled");
+      else throw new Error(`The previous action is ${result.status.toLowerCase()} and was not queued again.`);
     } catch (error) {
       setApprovalError(error instanceof Error ? error.message : "Approved message was not queued.");
       setApproval("error");
@@ -96,7 +100,7 @@ export function Dashboard({ snapshot, managerName }: { snapshot: DashboardSnapsh
             <div className="panel-top"><div className="profile"><span>{customer.initials}</span><div><strong>{customer.name}</strong><small>Contact detail stays in VinSolutions</small></div></div></div>
             <div className="vehicle"><div><span>VEHICLE OF INTEREST</span><strong>{customer.vehicle}</strong><small>{customer.source} · Lead #{customer.id.replace("vs-", "")}</small></div><span className="hot"><span /> {customer.status}</span></div>
 
-            {customer.recommendation && dismissedId !== customer.id ? <div className="recommendation"><div className="recommend-head"><span><Sparkle weight="fill" /> SARAH RECOMMENDS</span><em>{Math.round(customer.recommendation.confidence * 100)}% confidence</em></div><strong>{customer.recommendation.title}</strong><p>{customer.recommendation.reason}</p><div className="draft"><span>{customer.recommendation.channel} DRAFT</span><p>{customer.recommendation.body}</p></div><small className="execution-note">Approval records the draft for connector execution; it does not claim external delivery.</small><div className="recommend-actions"><button onClick={approveRecommendation} disabled={approval === "sending" || approval === "queued" || approval === "demo"} className={approval === "queued" ? "approved" : "primary"}>{approval === "sending" ? "Queueing…" : approval === "queued" ? <><Check weight="bold" /> Approved & queued</> : approval === "demo" ? "Demo only — not queued" : approval === "error" ? "Try again" : "Approve & queue"}</button><button onClick={() => setDismissedId(customer.id)}>Dismiss</button></div>{approvalError ? <p className="action-error" role="alert">{approvalError}</p> : null}</div> : null}
+            {customer.recommendation && dismissedId !== customer.id ? <div className="recommendation"><div className="recommend-head"><span><Sparkle weight="fill" /> SARAH RECOMMENDS</span><em>{Math.round(customer.recommendation.confidence * 100)}% confidence</em></div><strong>{customer.recommendation.title}</strong><p>{customer.recommendation.reason}</p><div className="draft"><span>{customer.recommendation.channel} DRAFT</span><p>{customer.recommendation.body}</p></div><small className="execution-note">Approval records the draft for connector execution; it does not claim external delivery.</small><div className="recommend-actions"><button onClick={approveRecommendation} disabled={approval === "sending" || approval === "queued" || approval === "demo" || approval === "handled"} className={approval === "queued" || approval === "handled" ? "approved" : "primary"}>{approval === "sending" ? "Queueing…" : approval === "queued" ? <><Check weight="bold" /> Approved & queued</> : approval === "demo" ? "Demo only — not queued" : approval === "handled" ? <><Check weight="bold" /> Already recorded sent</> : approval === "error" ? "Try again" : "Approve & queue"}</button><button onClick={() => setDismissedId(customer.id)}>Dismiss</button></div>{approvalError ? <p className="action-error" role="alert">{approvalError}</p> : null}</div> : null}
             {customer.events.length ? <>
               <div className="timeline-heading"><div><h3>Customer timeline</h3><span>Source of truth</span></div>{customer.vinSolutionsUrl ? <a href={customer.vinSolutionsUrl} target="_blank" rel="noreferrer">View in VinSolutions ↗</a> : <span className="crm-link-disabled">CRM link unavailable</span>}</div>
               <div className="timeline">{customer.events.map((event, index) => <div className="event" key={event.id}><div className={`event-icon ${event.type.toLowerCase()}`}>{event.type === "APPOINTMENT_CREATED" ? <CalendarCheck /> : event.type === "CUSTOMER_REPLIED" ? <ChatCircleDots /> : event.type === "AI_TEXT_SENT" ? <Sparkle /> : <Users />}</div><div className="event-content"><div><strong>{event.title}</strong><time>{eventTime(event)}</time></div><p>{event.detail}</p><span>{event.channel}</span></div>{index < customer.events.length - 1 && <i />}</div>)}</div>

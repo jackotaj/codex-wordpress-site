@@ -70,5 +70,16 @@ export const managerLoginSchema = z.object({
   accessCode: z.string().min(32).max(512),
 }).strict();
 
+export const completeActionSchema = z.object({
+  outcome: z.enum(["SENT", "FAILED"]),
+  externalMessageId: z.string().trim().min(1).max(240).optional(),
+  failureReason: z.string().trim().min(1).max(600).optional(),
+}).strict().superRefine((value, context) => {
+  if (value.outcome === "FAILED" && !value.failureReason) {
+    context.addIssue({ code: "custom", path: ["failureReason"], message: "A failure reason is required." });
+  }
+});
+
 export type ConnectorEventInput = z.infer<typeof connectorEventEnvelopeSchema>;
 export type ApprovedMessageInput = z.infer<typeof approvedMessageSchema>;
+export type CompleteActionInput = z.infer<typeof completeActionSchema>;

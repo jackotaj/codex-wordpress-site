@@ -60,6 +60,16 @@ export interface DashboardSnapshot {
 export interface QueuedMessage {
   actionId: string;
   mode: "demo" | "database";
-  status: "DEMO_ONLY" | "APPROVED";
+  status: "DEMO_ONLY" | "APPROVED" | "ALREADY_SENT" | "PROCESSING" | "FAILED" | "CANCELLED";
   duplicate: boolean;
+}
+
+export interface ApprovedAction {
+  actionId: string;
+  customerId: string;
+  channel: Extract<Channel, "SMS" | "EMAIL">;
+  body: string;
+  approvedBy: string;
+  createdAt: string;
+  status: "APPROVED";
 }
