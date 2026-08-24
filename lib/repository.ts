@@ -254,7 +254,7 @@ export async function persistConnectorEvent(input: ConnectorEventInput): Promise
   }
 }
 
-export async function queueApprovedMessage(input: ApprovedMessageInput): Promise<QueuedMessage> {
+export async function queueApprovedMessage(input: ApprovedMessageInput & { approvedBy: string }): Promise<QueuedMessage> {
   if (!databaseConfigured()) {
     return { actionId: `demo-${randomUUID()}`, mode: "demo", status: "DEMO_ONLY", duplicate: false };
   }

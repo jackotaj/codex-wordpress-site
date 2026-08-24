@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarCheck, CaretDown, ChatCircleDots, Check, Clock, DotsThree, Gauge, MagnifyingGlass, Robot, SidebarSimple, Sparkle, Users } from "@phosphor-icons/react";
+import { CalendarCheck, CaretDown, ChatCircleDots, Check, Clock, Gauge, MagnifyingGlass, Robot, SidebarSimple, SignOut, Sparkle, Users } from "@phosphor-icons/react";
 import type { CustomerEvent, DashboardSnapshot, QueuedMessage } from "@/lib/types";
+import { useRouter } from "next/navigation";
 
 const nav = [
   { label: "Overview", icon: Gauge, active: true },
@@ -14,7 +15,8 @@ function eventTime(event: CustomerEvent): string {
   return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(date);
 }
 
-export function Dashboard({ snapshot }: { snapshot: DashboardSnapshot }) {
+export function Dashboard({ snapshot, managerName }: { snapshot: DashboardSnapshot; managerName: string }) {
+  const router = useRouter();
   const { customers, stats, runtime } = snapshot;
   const [activeId, setActiveId] = useState(customers[0]?.id ?? "");
   const [filter, setFilter] = useState("all");
@@ -43,7 +45,6 @@ export function Dashboard({ snapshot }: { snapshot: DashboardSnapshot }) {
           customerId: customer.id,
           channel: customer.recommendation.channel,
           body: customer.recommendation.body,
-          approvedBy: "Todd Jacob",
         }),
       });
       const result = await response.json() as Partial<QueuedMessage> & { error?: string };
@@ -55,17 +56,23 @@ export function Dashboard({ snapshot }: { snapshot: DashboardSnapshot }) {
     }
   }
 
+  async function signOut() {
+    await fetch("/api/session", { method: "DELETE" });
+    router.replace("/login");
+    router.refresh();
+  }
+
   return (
     <main className="app-shell">
       <aside className={`sidebar ${mobileOpen ? "mobile-open" : ""}`}>
         <div className="brand"><div className="brand-mark"><Sparkle weight="fill" /></div><div><strong>Sarah</strong><span>Revenue Assistant</span></div></div>
         <div className="store-select"><span className="store-icon">SH</span><div><strong>Safford Hyundai</strong><span>Leesburg, VA</span></div><CaretDown /></div>
         <nav>{nav.map(({ label, icon: Icon, active }) => <button className={active ? "nav-active" : ""} key={label}><Icon size={20} weight={active ? "fill" : "regular"} /><span>{label}</span></button>)}</nav>
-        <div className="sidebar-bottom"><div className="system-status"><span className={`pulse ${runtime.state === "unavailable" ? "pulse-error" : ""}`} /><div><strong>{runtime.label}</strong><small>{runtime.dataMode === "demo" ? "No live data is being stored" : "PostgreSQL customer timeline"}</small></div></div><div className="user"><span>TJ</span><div><strong>Todd Jacob</strong><small>General Sales Manager</small></div><DotsThree size={20} /></div></div>
+        <div className="sidebar-bottom"><div className="system-status"><span className={`pulse ${runtime.state === "unavailable" ? "pulse-error" : ""}`} /><div><strong>{runtime.label}</strong><small>{runtime.dataMode === "demo" ? "No live data is being stored" : "PostgreSQL customer timeline"}</small></div></div><div className="user"><span>{managerName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span><div><strong>{managerName}</strong><small>General Sales Manager</small></div><button type="button" onClick={signOut} aria-label="Sign out" title="Sign out"><SignOut size={19} /></button></div></div>
       </aside>
 
       <section className="content">
-        <header><div><button className="mobile-menu" onClick={() => setMobileOpen((value) => !value)} aria-label="Toggle menu"><SidebarSimple /></button><span className="eyebrow">{today}</span><h1>Good morning, Todd</h1><p>Review customer activity and approve the actions that are safe to execute.</p></div><div className="header-actions"><div className="search"><MagnifyingGlass /><input aria-label="Search customers" placeholder="Search customers" value={query} onChange={(event) => { setQuery(event.target.value); setApproval("idle"); setApprovalError(""); setDismissedId(""); }} /></div></div></header>
+        <header><div><button className="mobile-menu" onClick={() => setMobileOpen((value) => !value)} aria-label="Toggle menu"><SidebarSimple /></button><span className="eyebrow">{today}</span><h1>Good morning, {managerName.split(/\s+/)[0]}</h1><p>Review customer activity and approve the actions that are safe to execute.</p></div><div className="header-actions"><div className="search"><MagnifyingGlass /><input aria-label="Search customers" placeholder="Search customers" value={query} onChange={(event) => { setQuery(event.target.value); setApproval("idle"); setApprovalError(""); setDismissedId(""); }} /></div></div></header>
 
         <section className={`runtime-banner runtime-${runtime.state}`} role={runtime.state === "unavailable" ? "alert" : "status"}><strong>{runtime.label}</strong><span>{runtime.detail}</span></section>
 

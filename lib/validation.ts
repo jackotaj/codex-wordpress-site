@@ -64,7 +64,10 @@ export const approvedMessageSchema = z.object({
   customerId: z.string().trim().min(1).max(240),
   channel: z.enum(["SMS", "EMAIL"]),
   body: z.string().trim().min(1).max(4000),
-  approvedBy: z.string().trim().min(1).max(160),
+}).strict();
+
+export const managerLoginSchema = z.object({
+  accessCode: z.string().min(32).max(512),
 }).strict();
 
 export type ConnectorEventInput = z.infer<typeof connectorEventEnvelopeSchema>;
