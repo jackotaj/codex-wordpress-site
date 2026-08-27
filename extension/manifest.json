@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Sarah CRM Connector",
+  "version": "0.2.0",
+  "description": "Captures verified VinSolutions context and presents manager-approved Sarah drafts.",
+  "permissions": ["storage", "clipboardWrite"],
+  "host_permissions": ["https://*.vinsolutions.com/*"],
+  "optional_host_permissions": ["https://*/*", "http://localhost/*"],
+  "background": { "service_worker": "service-worker.js" },
+  "action": { "default_title": "Sarah CRM Connector" },
+  "options_page": "options.html",
+  "content_scripts": [{ "matches": ["https://*.vinsolutions.com/*"], "js": ["content-script.js"], "run_at": "document_idle" }]
+}
